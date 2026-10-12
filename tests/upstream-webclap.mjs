@@ -41,6 +41,7 @@ try {
   browser=await chromium.launch({headless:true,args:['--autoplay-policy=no-user-gesture-required']});
   const page=await browser.newPage();page.setDefaultTimeout(20000);
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  page.on('console',m=>{if(m.type()==='error')console.error('Browser:',m.text());});
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   const result=await page.evaluate(async(profile)=>{
     return await Promise.race([(async()=>{
@@ -55,6 +56,7 @@ try {
         try {
           if(ctx.sampleRate!==rate)throw Error(`Requested ${rate}, got ${ctx.sampleRate}`);
           const node=await plugin.createNode(ctx,id);
+          node.addEventListener('processorerror',()=>console.error('AudioWorklet processor failed'));
           const merger=ctx.createChannelMerger(2),split=ctx.createChannelSplitter(2);
           const sources=[.2,.1].map((value,i)=>{const s=ctx.createConstantSource();s.offset.value=value;s.connect(merger,0,i);s.start();return s;});
           merger.connect(node);node.connect(split);

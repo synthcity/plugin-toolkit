@@ -25,7 +25,13 @@ jobs:
         with:
           node-version: 22
       - run: rustup target add wasm32-unknown-unknown
+      - run: rustc --version
       - run: node examples/rust-gain/build.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: example-webclap
+          path: examples/rust-gain/dist/portable-clack-gain.wclap/module.wasm
+          retention-days: 1
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Prepare independent host
