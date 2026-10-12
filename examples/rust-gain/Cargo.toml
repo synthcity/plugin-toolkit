@@ -1,0 +1,24 @@
+[package]
+name = "portable-clack-gain"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[dependencies]
+clack-plugin = { git = "https://github.com/prokopyl/clack", rev = "27ca28391b57a61bad4bb5099288a7bf9247350d" }
+clack-extensions = { git = "https://github.com/prokopyl/clack", rev = "27ca28391b57a61bad4bb5099288a7bf9247350d", features = ["audio-ports", "params", "state", "clack-plugin"] }
+
+[dev-dependencies]
+clack-host = { git = "https://github.com/prokopyl/clack", rev = "27ca28391b57a61bad4bb5099288a7bf9247350d", default-features = false, features = ["clack-plugin"] }
+clack-extensions = { git = "https://github.com/prokopyl/clack", rev = "27ca28391b57a61bad4bb5099288a7bf9247350d", features = ["clack-host"] }
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1

@@ -1,0 +1,37 @@
+name: Portable examples
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust native tests
+        run: cargo test --locked --manifest-path examples/rust-gain/Cargo.toml
+      - name: C++ native tests
+        run: |
+          cmake -S examples/cpp-midside -B examples/cpp-midside/build/native -DCMAKE_BUILD_TYPE=Release
+          cmake --build examples/cpp-midside/build/native --parallel 2
+          ctest --test-dir examples/cpp-midside/build/native --output-on-failure
+  webclap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: rustup target add wasm32-unknown-unknown
+      - run: node examples/rust-gain/build.mjs
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Prepare independent host
+        run: |
+          mkdir -p .cache
+          git clone https://github.com/WebCLAP/browser-test-host.git .cache/webclap-host
+          git -C .cache/webclap-host checkout b42ade615bef2c989f96400a7b0b2ef15cabd396
+          git -C .cache/webclap-host submodule update --init --recursive
+      - run: node tests/upstream-webclap.mjs .cache/webclap-host examples/rust-gain/dist/portable-clack-gain.wclap/module.wasm gain
