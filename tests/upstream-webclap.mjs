@@ -6,11 +6,18 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {chromium} from 'playwright';
 const upstream=resolve(process.argv[2]??'.cache/webclap-host');
-const revision='b42ade615bef2c989f96400a7b0b2ef15cabd396';
-if(execFileSync('git',['-C',upstream,'rev-parse','HEAD'],{encoding:'utf8'}).trim()!==revision) throw Error(`Expected upstream host ${revision}`);
+const canary=process.env.WEBCLAP_CANARY==='1';
+const pinnedRevision='b42ade615bef2c989f96400a7b0b2ef15cabd396';
+const revision=execFileSync('git',['-C',upstream,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
+if(!canary && revision!==pinnedRevision)throw Error(`Expected upstream host ${pinnedRevision}`);
 const dependencies=execFileSync('git',['-C',upstream,'submodule','status','--recursive','clap-audionode/wclap-js'],{encoding:'utf8'});
-if(dependencies.split('\n').filter(Boolean).some(line=>line[0]!==' ')) throw Error('Initialize the pinned upstream host submodules');
-if(execFileSync('git',['-C',upstream,'status','--porcelain','--untracked-files=no'],{encoding:'utf8'}).trim()) throw Error('Use an unmodified upstream host checkout');
+if(dependencies.split('\n').filter(Boolean).some(line=>line[0]!==' ' && !(canary && line[0]==='+'))) throw Error('Initialize the pinned upstream host submodules');
+if(execFileSync('git',['-C',upstream,'status','--porcelain','--untracked-files=no','--ignore-submodules=all'],{encoding:'utf8'}).trim()) throw Error('Use an unmodified upstream host checkout');
+// A canary may advance submodule commits, but never modify their source.
+for(const line of dependencies.split('\n').filter(Boolean)){
+ const path=line.trim().replace(/^\+/, '').split(/\s+/)[1];
+ if(execFileSync('git',['-C',resolve(upstream,path),'status','--porcelain','--untracked-files=no','--ignore-submodules=all'],{encoding:'utf8'}).trim())throw Error(`Modified upstream dependency: ${path}`);
+}
 const root=resolve(upstream,'clap-audionode');
 const binary=process.argv[3]?resolve(process.argv[3]):new URL('../examples/cpp-midside/build/wasm/midside.wasm',import.meta.url);
 const pluginBytes=await readFile(binary);
@@ -58,6 +65,9 @@ try {
           await ctx.suspend();
           if(ctx.sampleRate!==rate)throw Error(`Requested ${rate}, got ${ctx.sampleRate}`);
           const node=await plugin.createNode(ctx,id);
+          const rescans=[];
+          // The upstream node exposes host notifications through this map.
+          node.events.params_rescan=flags=>rescans.push(flags);
           node.addEventListener('processorerror',()=>console.error('AudioWorklet processor failed'));
           const merger=ctx.createChannelMerger(2),split=ctx.createChannelSplitter(2);
           const sources=[.2,.1].map((value,i)=>{const s=ctx.createConstantSource();s.offset.value=value;s.connect(merger,0,i);s.start();return s;});
@@ -85,12 +95,12 @@ try {
           await node.loadState(state);await checkAudio([.2,.1]);
           const value=await node.getParam(profile.param);if(value.value!==profile.initial)throw Error(`State restore failed: ${JSON.stringify(value)}`);
           sources.forEach(s=>s.stop());node.disconnect();
-          results.push({rate,discovery:true,audio:true,parameter:true,state:true});
+          results.push({rate,discovery:true,audio:true,parameter:true,state:true,parameterRescans:rescans});
         } finally {await ctx.close();}
       }
       return results;
     })(),new Promise((_,reject)=>setTimeout(()=>reject(Error('Independent host timed out')),18000))]);
   },profile);
   if(errors.length)throw Error(errors.join('\n'));
-  console.log(JSON.stringify({host:'WebCLAP/browser-test-host',revision,plugin:profile.id,sha256:createHash('sha256').update(pluginBytes).digest('hex'),results:result},null,2));
+  console.log(JSON.stringify({host:'WebCLAP/browser-test-host',revision,canary,dependencies:dependencies.trim().split('\n'),plugin:profile.id,sha256:createHash('sha256').update(pluginBytes).digest('hex'),results:result},null,2));
 } finally {await browser?.close();await new Promise(r=>server.close(r));}

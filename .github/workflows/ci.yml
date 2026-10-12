@@ -18,6 +18,10 @@ jobs:
           cmake --build examples/cpp-midside/build/native --parallel 2
           ctest --test-dir examples/cpp-midside/build/native --output-on-failure
   webclap:
+    strategy:
+      fail-fast: false
+      matrix:
+        upstream: [pinned, latest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +33,7 @@ jobs:
       - run: node examples/rust-gain/build.mjs
       - uses: actions/upload-artifact@v4
         with:
-          name: example-webclap
+          name: example-webclap-${{ matrix.upstream }}
           path: examples/rust-gain/dist/portable-clack-gain.wclap/module.wasm
           retention-days: 1
       - run: npm ci
@@ -38,6 +42,16 @@ jobs:
         run: |
           mkdir -p .cache
           git clone https://github.com/WebCLAP/browser-test-host.git .cache/webclap-host
-          git -C .cache/webclap-host checkout b42ade615bef2c989f96400a7b0b2ef15cabd396
+          if [ "${{ matrix.upstream }}" = pinned ]; then
+            git -C .cache/webclap-host checkout b42ade615bef2c989f96400a7b0b2ef15cabd396
+          fi
           git -C .cache/webclap-host submodule update --init --recursive
-      - run: node tests/upstream-webclap.mjs .cache/webclap-host examples/rust-gain/dist/portable-clack-gain.wclap/module.wasm gain
+          if [ "${{ matrix.upstream }}" = latest ]; then
+            git -C .cache/webclap-host/clap-audionode/wclap-js fetch origin HEAD
+            git -C .cache/webclap-host/clap-audionode/wclap-js checkout --detach FETCH_HEAD
+            git -C .cache/webclap-host/clap-audionode/wclap-js submodule update --init --recursive
+          fi
+      - name: Qualify upstream host
+        env:
+          WEBCLAP_CANARY: ${{ matrix.upstream == 'latest' && '1' || '0' }}
+        run: node tests/upstream-webclap.mjs .cache/webclap-host examples/rust-gain/dist/portable-clack-gain.wclap/module.wasm gain

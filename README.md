@@ -53,6 +53,8 @@ This is an early developer toolkit. The examples have been exercised on macOS an
 
 Product engines, sound libraries and application source are not included. This repository contains source examples, not SynthCity product plugin exports.
 
+See [upstream collaboration and compatibility checks](docs/upstream-collaboration.md) for the pinned/latest test policy and modular discussion points.
+
 ## Licence and contributions
 
 Toolkit code is MIT except where a subdirectory or file specifies otherwise. The Rust starter is MIT OR Apache-2.0, derived from Clack's gain example; HetrickCV sources are CC0; CLAP headers retain their MIT licence. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
