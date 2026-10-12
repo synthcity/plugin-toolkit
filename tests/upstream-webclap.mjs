@@ -54,6 +54,8 @@ try {
       for(const rate of [44100,48000,96000]) {
         const ctx=new AudioContext({sampleRate:rate});
         try {
+          // Autoplay-enabled browsers may start a new context immediately.
+          await ctx.suspend();
           if(ctx.sampleRate!==rate)throw Error(`Requested ${rate}, got ${ctx.sampleRate}`);
           const node=await plugin.createNode(ctx,id);
           node.addEventListener('processorerror',()=>console.error('AudioWorklet processor failed'));
