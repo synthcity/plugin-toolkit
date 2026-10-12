@@ -53,7 +53,6 @@ try {
       for(const rate of [44100,48000,96000]) {
         const ctx=new AudioContext({sampleRate:rate});
         try {
-          await ctx.resume();
           if(ctx.sampleRate!==rate)throw Error(`Requested ${rate}, got ${ctx.sampleRate}`);
           const node=await plugin.createNode(ctx,id);
           const merger=ctx.createChannelMerger(2),split=ctx.createChannelSplitter(2);
@@ -61,6 +60,9 @@ try {
           merger.connect(node);node.connect(split);
           const analysers=[0,1].map(i=>{const a=ctx.createAnalyser();a.fftSize=256;split.connect(a,i);return a;});
           const mute=ctx.createGain();mute.gain.value=0;analysers.forEach(a=>a.connect(mute));mute.connect(ctx.destination);
+          // Connect sources before starting the context: a CLAP effect may
+          // legitimately sleep on silence, which ends the upstream worklet.
+          await ctx.resume();
           const checkAudio=async(expected)=>{
             // AudioWorklet start and parameter messages are asynchronous. Poll
             // the entire analyser window; slower CI runners need more than 100 ms.
