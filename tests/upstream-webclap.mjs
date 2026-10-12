@@ -62,8 +62,16 @@ try {
           const analysers=[0,1].map(i=>{const a=ctx.createAnalyser();a.fftSize=256;split.connect(a,i);return a;});
           const mute=ctx.createGain();mute.gain.value=0;analysers.forEach(a=>a.connect(mute));mute.connect(ctx.destination);
           const checkAudio=async(expected)=>{
-            await new Promise(r=>setTimeout(r,100));
-            analysers.forEach((a,i)=>{const samples=new Float32Array(a.fftSize);a.getFloatTimeDomainData(samples);if(samples.some(v=>!Number.isFinite(v)||Math.abs(v-expected[i])>1e-5))throw Error(`Audio mismatch at ${rate}: channel ${i}, got ${samples[128]}, expected ${expected[i]}`);});
+            // AudioWorklet start and parameter messages are asynchronous. Poll
+            // the entire analyser window; slower CI runners need more than 100 ms.
+            const deadline=performance.now()+3000;
+            let last=[];
+            while(performance.now()<deadline){
+              await new Promise(r=>setTimeout(r,25));
+              last=analysers.map(a=>{const samples=new Float32Array(a.fftSize);a.getFloatTimeDomainData(samples);return samples;});
+              if(last.every((samples,i)=>samples.every(v=>Number.isFinite(v)&&Math.abs(v-expected[i])<=1e-5)))return;
+            }
+            throw Error(`Audio mismatch at ${rate}: got ${last.map(s=>s[128])}, expected ${expected}, context=${ctx.state}, time=${ctx.currentTime}`);
           };
           await node.setParam(profile.param,profile.initial);await checkAudio([.2,.1]);
           const state=await node.saveState();if(!state||!state.byteLength||(profile.stateBytes&&state.byteLength!==profile.stateBytes))throw Error('Invalid saved state');
